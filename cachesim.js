@@ -1,6 +1,4 @@
-const fs = require("fs");
-
-//cache parent class
+// Parent cache class
 class Cache {
     constructor( cacheSize, blockSize, assoc ) {
         this.cacheSize = cacheSize;
@@ -29,20 +27,20 @@ class Cache {
     getMisses() { return this.misses; }
 
     info( print ) {
-        print( "cache size: " + this.cacheSize );
-        print( "block size: " + this.blockSize );
-        print( "set associativity: " + this.assoc );
-        print( "# blocks: " + this.blocks );
-        print( "# sets: " + this.sets );
-        print( "index bits: " + this.indexBits );
-        print( "offset bits: " + this.offsetBits );
-        print( "tag bits: " + this.tagBits);
+        print( "Cache size: " + this.cacheSize );
+        print( "Block size: " + this.blockSize );
+        print( "# Blocks: " + this.blocks );
+        print( "Set associativity: " + this.assoc );
+        print( "# Sets: " + this.sets );
+        print( "Index bits: " + this.indexBits );
+        print( "Offset bits: " + this.offsetBits );
+        print( "Tag bits: " + this.tagBits);
     }
 
     hitInfo( print ) {
-        print( "hits: " + this.hits);
-        print( "misses: " + this.misses);
-        print( "hit rate: " + this.hits / ( this.hits + this.misses ) );
+        print( "Hits: " + this.hits);
+        print( "Misses: " + this.misses);
+        print( "Hit rate: " + this.hits / ( this.hits + this.misses ) );
     }
 
     addrInfo( address ) {
@@ -52,7 +50,7 @@ class Cache {
     }
 
     getIndex( address ) {
-        if ( this.indexBits === 0 ) { return 0; } //fully associative case 
+        if ( this.indexBits === 0 ) { return 0; } // Fully associative case 
         return ( address >>> this.offsetBits ) & ( 0xFFFFFFFF >>> ( this.offsetBits + this.tagBits ) );
     }
 
@@ -91,7 +89,7 @@ class Cache {
     }
 }
 
-//writethrough cache
+// Writethrough cache
 class WriteThrough extends Cache {
     write( address ) {
         var attr = this.split( address );
@@ -144,7 +142,7 @@ class WriteThrough extends Cache {
     }
 }
 
-//basic writeback cache. does not use an L2 cache but can be used as an L2 cache.
+// Basic writeback cache - does not use an L2 cache but can be used as an L2 cache
 class WriteBack extends Cache {
     write( address ) {
         var attr = this.split( address );
@@ -201,7 +199,7 @@ class WriteBack extends Cache {
     }
 }
 
-//Writeback cache that uses an L2 cache.
+// Writeback cache that uses an L2 cache.
 class WriteBackL1 extends Cache {
     constructor( cacheSize, blockSize, assoc, L2 ) {
         super( cacheSize, blockSize, assoc );
@@ -265,38 +263,46 @@ class WriteBackL1 extends Cache {
     }
 }
 
-//read trace of memory references to a data and instruction cache
-function read( file, dataCache, instructionCache ) {
-    trace = fs.readFileSync( file );
+// Run a single instruction
+function runInstruction( type, addressHex, dataCache, instructionCache ) {
+    if ( type === "0" ) {
+        dataCache.read( address );
+    }
+    else if ( type === "1" ) {
+        dataCache.write( address );
+    }
+    else if ( type === "2" ) {
+        instructionCache.read( address );
+    }
+}
+
+// Read trace of memory references to a data and instruction cache
+function read( trace, dataCache, instructionCache ) {
     traceEntries = trace.toString().split("\n");
     traceEntries.forEach( function( entry ) {
-        reference = entry.split(" ");
-        address = ( parseInt(reference[1], 16) >>> 0 ); //bitshift to convert to 32 bit unsigned
-        if ( reference[0] === "0" ) {
-            dataCache.read( address );
-        }
-        else if ( reference[0] === "1" ) {
-            dataCache.write( address );
-        }
-        else if ( reference[0] === "2" ) {
-            instructionCache.read( address );
-        }
-        
+        reference = entry.split( " " );
+        runInstruction( reference[0], reference[1], dataCache, instructionCache ); 
     });
-
 }
 
-// helper functions
+   
+
+// Convert an unsigned address to hex
 function toHex( address ) {
-    return ( address ).toString(16);
+    return ( address ).toString( 16 );
 }
 
-// generate an instruction type
+// Convert a hex address to 32 bit unsigned
+function toUnsigned( addressHex ) {
+        return ( parseInt( addressHex, 16 ) >>> 0 );
+}
+
+// Generate an instruction type as an int: 0, 1, or 2
 function generateType() {
     return Math.floor( Math.random() * 4 ) + 1;
 }
 
-// generate an address
+// Generate an address
 function generateAddress() {
     var randomIntArray = new Uint32Array( 1 );
     window.crypto.getRandomValues( randomIntArray );
