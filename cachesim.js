@@ -291,6 +291,17 @@ function toHex( address ) {
     return ( address ).toString(16);
 }
 
+// generate an instruction type
+function generateType() {
+    return Math.floor( Math.random() * 4 ) + 1;
+}
+
+// generate an address
+function generateAddress() {
+    var randomIntArray = new Uint32Array( 1 );
+    window.crypto.getRandomValues( randomIntArray );
+    return toHex( randomIntArray[0] );
+}
 
 function amat2( l1d, l1i, h, m ) {
     return h + ( ( ( l1d.getMisses() + l1i.getMisses() ) / ( l1d.getMisses() + l1i.getMisses() + l1d.getHits() + l1i.getHits() ) ) * m );
