@@ -69,20 +69,24 @@ class Cache {
         return [ tag, index, offset ];
     }
 
-    dump( printRow, printCol ) {
-        printRow( function() {
-            printCol( "index" ); 
-            printCol( "valid" );
-            printCol( "tag" );
+    display( makeRow ) {
+        makeRow( function( makeCol ) {
+            return (
+                makeCol( "index" ) +
+                makeCol( "valid" ) +
+                makeCol( "tag" )
+            );
         });
         for ( var index = 0; index < this.sets; index++ ) {
             for ( var entry = 0; entry < this.assoc; entry++ ) {
                 var valid = this.cache[index][entry][0];
                 var tag = this.cache[index][entry][1];
-                printRow( function() {
-                    printCol( toHex( index ) );
-                    printCol( valid );
-                    printCol( toHex( tag ) );
+                makeRow( function( makeCol ) {
+                    return (
+                        makeCol( toHex( index ) ) +
+                        makeCol( valid ) +
+                        makeCol( toHex( tag ) )
+                    );
                 });
             }
         }
