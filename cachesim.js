@@ -1,21 +1,96 @@
-// Parent cache class
+class CacheEntry {
+    constructor( valid=0, tag=0 ) {
+        this.valid = valid;
+        this.tag = tag;
+    }
+
+    display( displayField ) {
+        return (
+            displayField( valid ) +
+            displayField( toHex( tag ) )
+        );
+    }
+}
+
+CacheEntry.displayLabels = function( displayField ) {
+    return (
+        displayField( 'valid' ) +
+        displayField( 'tag' )
+    );
+}
+
+class LRUCacheEntry extends CacheEntry{
+    constructor( valid=0, tag=0, lru=0 ) {
+        super( valid, tag );
+        this.lru = lru;
+    }
+
+    incrementLRU() {
+        if ( valid ) {
+            this.lru++;
+        }
+    }
+
+    display( displayField ) {
+        return (
+            super.display( displayField ) +
+            displayField( toHex( lru ) )
+        );
+    }
+}
+
+LRUCacheEntry.displayLabels = function(displayField ) {
+    return (
+        super.displayLabels( displayField ) +
+        displayField( 'lru' )
+    );
+}
+
+class dirtyBitLRUCacheEntry extends LRUCacheEntry{
+    constructor( valid=0, tag=0, lru=0, dirty=0 ) {
+        super( valid, tag );
+        this.lru = lru;
+        this.dirty = dirty;
+    }
+
+    display( displayField ) {
+        return (
+            super.display( displayField ) +
+            displayField( toHex( dirty ) )
+        );
+    }
+}
+
+dirtyBitLRUCacheEntry.displayLabels = function( displayField ) {
+    return (
+        super.displayLabels( displayField ) +
+        displayField( 'dirty' )
+    );
+}
+
 class Cache {
-    constructor( cacheSize, blockSize, assoc ) {
+    constructor( cacheSize, blockSize, setSize, cacheEntry, next=null ) {
+        if ( !isPower2( cacheSize ) ) { throw "Cache size must be power of 2"; }
+        if ( !isPower2( blockSize ) ) { throw "Block size must be power of 2"; }
+        if ( !isPower2( associativity ) ) { throw "Set associativity must be power of 2"; }
+
         this.cacheSize = cacheSize;
         this.blockSize = blockSize;
-        this.assoc = assoc;
+        this.setSize = setSize;
+        this.cacheEntry = cacheEntry;
+        this.next = next;
 
         this.blocks = cacheSize / blockSize;
-        this.sets = this.blocks / assoc;
+        this.sets = this.blocks / setSize;
         this.indexBits = Math.log2( this.sets );
         this.offsetBits = Math.log2( blockSize );
         this.tagBits = 32 - this.indexBits - this.offsetBits;
 
         this.cache = new Array( this.sets );
         for ( var index = 0; index < this.sets; index++ ) {
-            this.cache[index] = new Array( this.assoc );
-            for (var entry = 0; entry < this.assoc; entry++ ) {
-                this.cache[index][entry] = new Array( 3 ).fill(0);
+            this.cache[index] = new Array( this.setSize );
+            for ( var id = 0; id < this.setSize; id++ ) {
+                this.cache[index][id] = new cacheEntry();
             }
         }
 
@@ -26,27 +101,25 @@ class Cache {
     getHits() { return this.hits; }
     getMisses() { return this.misses; }
 
-    info( print ) {
-        print( "Cache size: " + this.cacheSize );
-        print( "Block size: " + this.blockSize );
-        print( "# Blocks: " + this.blocks );
-        print( "Set associativity: " + this.assoc );
-        print( "# Sets: " + this.sets );
-        print( "Index bits: " + this.indexBits );
-        print( "Offset bits: " + this.offsetBits );
-        print( "Tag bits: " + this.tagBits);
+    info( displayInfo ) {
+        return ( 
+            displayInfo( "Cache size: " + this.cacheSize ) +
+            displayInfo( "Block size: " + this.blockSize ) +
+            displayInfo( "# Blocks: " + this.blocks ) +
+            displayInfo( "Set associativity: " + this.setSize ) +
+            displayInfo( "# Sets: " + this.sets ) +
+            displayInfo( "Index bits: " + this.indexBits ) +
+            displayInfo( "Offset bits: " + this.offsetBits ) +
+            displayInfo( "Tag bits: " + this.tagBits )
+        );
     }
 
-    hitInfo( print ) {
-        print( "Hits: " + this.hits);
-        print( "Misses: " + this.misses);
-        print( "Hit rate: " + this.hits / ( this.hits + this.misses ) );
-    }
-
-    addrInfo( address ) {
-        console.log( toHex( address ) );
-        var attr = this.split( address );
-        console.log( toHex( attr[0] ) + " " + toHex( attr[1] ) + " " + toHex( attr[2] ) );
+    hitInfo( displayInfo ) {
+        return (
+            displayInfo( "Hits: " + this.hits )
+            displayInfo( "Misses: " + this.misses )
+            displayInfo( "Hit rate: " + this.hits / ( this.hits + this.misses ) )
+        );
     }
 
     getIndex( address ) {
@@ -69,36 +142,177 @@ class Cache {
         return [ tag, index, offset ];
     }
 
-    display( makeRow ) {
-        makeRow( function( makeCol ) {
-            return (
-                makeCol( "index" ) +
-                makeCol( "valid" ) +
-                makeCol( "tag" )
-            );
-        });
-        for ( var index = 0; index < this.sets; index++ ) {
-            for ( var entry = 0; entry < this.assoc; entry++ ) {
-                var valid = this.cache[index][entry][0];
-                var tag = this.cache[index][entry][1];
-                makeRow( function( makeCol ) {
-                    return (
-                        makeCol( toHex( index ) ) +
-                        makeCol( valid ) +
-                        makeCol( toHex( tag ) )
-                    );
-                });
+    display( displayRow, displayCol ) {
+        entries = displayRow(
+            displayCol( 'set' ) +
+            this.entry.displayNames( displayCol ) 
+        );
+        for ( var set = 0; set < this.sets; set++ ) {
+            for ( var id = 0; id < this.setSize; id++ ) {
+                entries += displayRow(
+                    displayCol( toHex( set ) ) +
+                    this.entry.displayNames( displayCol )
+                );
             }
+        }
+    }
+
+    readHit( set, tag, id ) { }
+    readMiss( set, tag, id ) { }
+    writeHit( set, tag, id ) { }
+    writeMiss( set, tag, id ) { }
+
+    locate( set, tag ) {
+        for ( var id = 0; id < this.assoc; id++ ) {
+            if ( this.cache[set][id].valid == 1 && this.cache[set][id].tag == tag ) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    write( set, tag ) {
+        var id = locate( set, tag );
+        if ( id !== null ) {
+            this.cache.hits++;
+            writeHit( set, tag, id );
+        }
+        else { 
+            this.cache.misses++;
+            writeMiss( set, tag, id );
+        }
+    }
+    
+    writeAddress( address ) {
+        var attr = this.split( address );
+        var tag = attr[0];
+        var set = attr[1];
+        write( set, tag );
+    }
+
+    read( set, tag ) {
+        var id = locate( set, tag );
+        if ( id !== null ) {
+            this.cache.hits++;
+            readHit( set, tag, id );
+        }
+        else { 
+            this.cache.misses++;
+            readMiss( set, tag, id );
+        }
+    }
+    
+    readAddress( address ) {
+        var attr = this.split( address );
+        var tag = attr[0];
+        var set = attr[1];
+        read( set, tag );
+    }
+}
+
+class LRUCache extends Cache {
+    getLRUId( set ) {
+        var lruId = 0;
+        for ( var entryId = 0; entryId < setSize; entryId++ ) {
+            if ( this.cache[set][replaceId].lru < this.cache[set][replaceId].lru ) {
+                replaceId = id;
+            }
+        }
+        return replaceId;
+    }
+
+    replaceLRU( set, tag ) {
+        var id = getLRUid( set );
+        var replaced = this.cache[set][id];
+        this.cache[set][id] = new LRUCacheEntry( 1, tag, 0 );
+        return replaced;
+    }
+
+    use( set, tag, id ) {
+        if ( this.cache[set][id].lru === 0 ) { return; }
+        for ( var entryId = 0; entryId < id; entryId++ ) {
+            if ( this.cache[set][entryId].lru < this.cache[set][id].lru ) {
+                this.cache[set][entryId].incrementLRU();
+            }
+        }
+        this.cache[set][id].lru = 0;
+    }
+}
+
+// Note: no-write-allocate
+class WriteThroughLRU extends LRUCache {
+    constructor( cacheSize, blockSize, setSize, next=null ) {
+        super( cacheSize, blockSize, setSize, LRUCacheEntry, next=null );
+    }
+
+    writeHit( set, tag, id ) {
+        use( set, tag, id );
+        if ( this.next ) { this.next.write( set, tag ); }
+    }
+
+    writeMiss( set, tag, id ) {
+        if ( this.next ) { this.next.write( set, tag );
+    }
+    
+    readHit( set, tag, id ) {
+        use( set, tag, id );
+    }
+
+    readMiss( set, tag, id ) {
+        replaceLRU( set, tag );
+        if ( this.next ) { 
+            this.next.read( set, tag ); 
         }
     }
 }
 
-// Writethrough cache
-class WriteThrough extends Cache {
-    write( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
+// Note: fetch on write
+class WriteBackLRU extends LRUCache {
+    constructor( cacheSize, blockSize, setSize, next=null ) {
+        super( cacheSize, blockSize, setSize, dirtyBitLRUCacheEntry, next=null );
+    }   
+
+    replaceLRU( set, tag ) { 
+        replaced = super.replaceLRU( set, tag );
+        if ( replaced.dirty = 1 ) {
+            next.write( set, tag )
+
+    writeHit( set, tag, id ) {
+        use( set, tag, id );
+        this.cache[set][id].dirty = 1;
+    }
+
+    writeMiss( set, tag, id ) {
+        replaced = replaceLRU( set, tag );
+        if ( this.next ) { 
+            this.next.write( set, tag ); 
+        }
+    }
+    
+    readHit( set, tag, id ) {
+        use( set, tag, id );
+    }
+
+    readMiss( set, tag, id ) {
+        replaceLRU( set, tag );
+        if ( this.next ) { 
+            this.next.read( set, tag ); 
+        }
+    }
+}
+
+
+
+        ( var id = 0; entry < this.assoc; entry++ ) {
+            if ( this.cache[index][entry][0] ) {
+                this.cache[index][entry][3]++;
+            }
+        }
+
+        this.cache[index][id][0] = 1
+        this.cache[index][id][1] = tag
+        this.cache[index
+
             var data = cache.cache[attr[1]].splice( entry, 1 );
             cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], data[0][2] ] );
             cache.misses++;
@@ -265,6 +479,11 @@ class WriteBackL1 extends Cache {
         }
         result( this, entry, this.L2 );
     }
+}
+
+                        
+function isPower2( value ) {
+    return value && !( value & ( value - 1 ) );
 }
 
 // Run a single instruction
