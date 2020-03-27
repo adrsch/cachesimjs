@@ -4,15 +4,19 @@ class CacheEntry {
         this.tag = tag;
     }
 
-    display( formatField ) {
+    display( 
+        formatField=function( field ) { return field.toString( 16 ) + " "; } 
+    ) {
         return (
             formatField( this.valid ) +
-            formatField( toHex( this.tag ) )
+            formatField( this.tag )
         );
     }
 }
 
-CacheEntry.displayLabels = function( formatField ) {
+CacheEntry.displayLabels = function( 
+    formatField=function( field ) { return field + " "; }
+) {
     return (
         formatField( 'valid' ) +
         formatField( 'tag' )
@@ -31,15 +35,19 @@ class LRUCacheEntry extends CacheEntry{
         }
     }
 
-    display( formatField ) {
+    display( 
+        formatField=function( field ) { return field.toString( 16 ) + " "; } 
+    ) {
         return (
             super.display( formatField ) +
-            formatField( toHex( this.lru ) )
+            formatField( this.lru )
         );
     }
 }
 
-LRUCacheEntry.displayLabels = function( formatField ) {
+LRUCacheEntry.displayLabels = function( 
+    formatField=function( field ) { return field + " "; }
+) {
     return (
         formatField( 'valid' ) +
         formatField( 'tag' ) +
@@ -54,15 +62,19 @@ class dirtyBitLRUCacheEntry extends LRUCacheEntry{
         this.dirty = dirty;
     }
 
-    display( formatField ) {
+    display( 
+        formatField=function( field ) { return field.toString( 16 ) + " "; } 
+    ) { 
         return (
             super.display( formatField ) +
-            formatField( toHex( this.dirty ) )
+            formatField( this.dirty )
         );
     }
 }
 
-dirtyBitLRUCacheEntry.displayLabels = function( formatField ) {
+dirtyBitLRUCacheEntry.displayLabels = function( 
+    formatField=function( field ) { return field + " "; }
+) {
     return (
         formatField( 'valid' ) +
         formatField( 'tag' ) +
@@ -73,9 +85,9 @@ dirtyBitLRUCacheEntry.displayLabels = function( formatField ) {
 
 class Cache {
     constructor( cacheSize, blockSize, setSize, cacheEntry, next=null ) {
-        if ( !isPower2( cacheSize ) ) { throw "Cache size must be power of 2"; }
-        if ( !isPower2( blockSize ) ) { throw "Block size must be power of 2"; }
-        if ( !isPower2( setSize ) ) { throw "Set associativity must be power of 2"; }
+        if ( !this.isPower2( cacheSize ) ) { throw "Cache size must be power of 2"; }
+        if ( !this.isPower2( blockSize ) ) { throw "Block size must be power of 2"; }
+        if ( !this.isPower2( setSize ) ) { throw "Set associativity must be power of 2"; }
 
         this.cacheSize = cacheSize;
         this.blockSize = blockSize;
@@ -101,10 +113,16 @@ class Cache {
         this.misses = 0;
     }
     
+    isPower2( value ) {
+        return value && !( value & ( value - 1 ) );
+    }
+
     getHits() { return this.hits; }
     getMisses() { return this.misses; }
 
-    info( formatInfo ) {
+    displayCacheInfo( 
+        formatInfo=function( info ) { return info + '\n'; }
+    ) {
         return ( 
             formatInfo( "Cache size: " + this.cacheSize ) +
             formatInfo( "Block size: " + this.blockSize ) +
@@ -117,14 +135,16 @@ class Cache {
         );
     }
 
-    hitInfo( formatInfo ) {
+    displayHitInfo( 
+        formatInfo=function( info ) { return info + '\n'; }
+    ) {
         return (
             formatInfo( "Hits: " + this.hits ) +
             formatInfo( "Misses: " + this.misses ) +
             formatInfo( "Hit rate: " + this.hits / ( this.hits + this.misses ) )
         );
     }
-
+    
     getIndex( address ) {
         if ( this.indexBits === 0 ) { return 0; } // Fully associative case 
         return ( address >>> this.offsetBits ) & ( 0xFFFFFFFF >>> ( this.offsetBits + this.tagBits ) );
@@ -139,14 +159,17 @@ class Cache {
     }
 
     split( address ) {
-        var unsignedAddress = toUnsigned( address );
+        var unsignedAddress = parseInt( addressHex, 16 ) >>> 0;
         var tag = this.getTag( unsignedAddress );
         var index = this.getIndex( unsignedAddress );
         var offset = this.getOffset( unsignedAddress );
         return [ tag, index, offset ];
     }
 
-    display( formatRow, formatCol ) {
+    display( 
+        formatRow=function( contents ) { return contents + '\n'; },
+        formatCol=function( contents ) { return contents.toString( 16 ) + ' '; }
+    ) {
         var entries = formatRow(
             formatCol( 'set' ) +
             this.cacheEntry.displayLabels( formatCol ) 
@@ -154,7 +177,7 @@ class Cache {
         for ( var set = 0; set < this.sets; set++ ) {
             for ( var id = 0; id < this.setSize; id++ ) {
                 entries += formatRow(
-                    formatCol( toHex( set ) ) +
+                    formatCol( set ) +
                     this.cache[set][id].display( formatCol )
                 );
             }
@@ -279,7 +302,8 @@ class WriteThroughLRU extends LRUCache {
 class WriteBackLRU extends LRUCache {
     constructor( cacheSize, blockSize, setSize, next=null ) {
         super( cacheSize, blockSize, setSize, dirtyBitLRUCacheEntry, next=null );
-    }   
+    }
+
     replaceLRU( set, tag, dirty=0 ) {
         var id = this.getLRUId( set );
         var replaced = this.cache[set][id];
@@ -312,10 +336,8 @@ class WriteBackLRU extends LRUCache {
     }
 }
 
-function isPower2( value ) {
-    return value && !( value & ( value - 1 ) );
+class MemorySystem {
 }
-
 // Run a single instruction
 function runInstruction( type, address, dataCache, instructionCache ) {
     if ( type == 'lw' || type == 0 ) {
@@ -338,17 +360,7 @@ function read( trace, dataCache, instructionCache ) {
     });
 }
 
-   
-
-// Convert an unsigned address to hex
-function toHex( address ) {
-    return ( address ).toString( 16 );
-}
-
-// Convert a hex address to 32 bit unsigned
-function toUnsigned( addressHex ) {
-        return ( parseInt( addressHex, 16 ) >>> 0 );
-}
+ 
 
 // Generate an instruction type as an int: 0, 1, or 2
 function generateType() {
