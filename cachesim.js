@@ -4,18 +4,18 @@ class CacheEntry {
         this.tag = tag;
     }
 
-    display( displayField ) {
+    display( formatField ) {
         return (
-            displayField( valid ) +
-            displayField( toHex( tag ) )
+            formatField( this.valid ) +
+            formatField( toHex( this.tag ) )
         );
     }
 }
 
-CacheEntry.displayLabels = function( displayField ) {
+CacheEntry.displayLabels = function( formatField ) {
     return (
-        displayField( 'valid' ) +
-        displayField( 'tag' )
+        formatField( 'valid' ) +
+        formatField( 'tag' )
     );
 }
 
@@ -31,18 +31,19 @@ class LRUCacheEntry extends CacheEntry{
         }
     }
 
-    display( displayField ) {
+    display( formatField ) {
         return (
-            super.display( displayField ) +
-            displayField( toHex( lru ) )
+            super.display( formatField ) +
+            formatField( toHex( this.lru ) )
         );
     }
 }
 
-LRUCacheEntry.displayLabels = function(displayField ) {
+LRUCacheEntry.displayLabels = function( formatField ) {
     return (
-        super.displayLabels( displayField ) +
-        displayField( 'lru' )
+        formatField( 'valid' ) +
+        formatField( 'tag' ) +
+        formatField( 'lru' )
     );
 }
 
@@ -53,18 +54,20 @@ class dirtyBitLRUCacheEntry extends LRUCacheEntry{
         this.dirty = dirty;
     }
 
-    display( displayField ) {
+    display( formatField ) {
         return (
-            super.display( displayField ) +
-            displayField( toHex( dirty ) )
+            super.display( formatField ) +
+            formatField( toHex( this.dirty ) )
         );
     }
 }
 
-dirtyBitLRUCacheEntry.displayLabels = function( displayField ) {
+dirtyBitLRUCacheEntry.displayLabels = function( formatField ) {
     return (
-        super.displayLabels( displayField ) +
-        displayField( 'dirty' )
+        formatField( 'valid' ) +
+        formatField( 'tag' ) +
+        formatField( 'lru' ) +
+        formatField( 'dirty' )
     );
 }
 
@@ -72,7 +75,7 @@ class Cache {
     constructor( cacheSize, blockSize, setSize, cacheEntry, next=null ) {
         if ( !isPower2( cacheSize ) ) { throw "Cache size must be power of 2"; }
         if ( !isPower2( blockSize ) ) { throw "Block size must be power of 2"; }
-        if ( !isPower2( associativity ) ) { throw "Set associativity must be power of 2"; }
+        if ( !isPower2( setSize ) ) { throw "Set associativity must be power of 2"; }
 
         this.cacheSize = cacheSize;
         this.blockSize = blockSize;
@@ -101,24 +104,24 @@ class Cache {
     getHits() { return this.hits; }
     getMisses() { return this.misses; }
 
-    info( displayInfo ) {
+    info( formatInfo ) {
         return ( 
-            displayInfo( "Cache size: " + this.cacheSize ) +
-            displayInfo( "Block size: " + this.blockSize ) +
-            displayInfo( "# Blocks: " + this.blocks ) +
-            displayInfo( "Set associativity: " + this.setSize ) +
-            displayInfo( "# Sets: " + this.sets ) +
-            displayInfo( "Index bits: " + this.indexBits ) +
-            displayInfo( "Offset bits: " + this.offsetBits ) +
-            displayInfo( "Tag bits: " + this.tagBits )
+            formatInfo( "Cache size: " + this.cacheSize ) +
+            formatInfo( "Block size: " + this.blockSize ) +
+            formatInfo( "# Blocks: " + this.blocks ) +
+            formatInfo( "Set associativity: " + this.setSize ) +
+            formatInfo( "# Sets: " + this.sets ) +
+            formatInfo( "Index bits: " + this.indexBits ) +
+            formatInfo( "Offset bits: " + this.offsetBits ) +
+            formatInfo( "Tag bits: " + this.tagBits )
         );
     }
 
-    hitInfo( displayInfo ) {
+    hitInfo( formatInfo ) {
         return (
-            displayInfo( "Hits: " + this.hits )
-            displayInfo( "Misses: " + this.misses )
-            displayInfo( "Hit rate: " + this.hits / ( this.hits + this.misses ) )
+            formatInfo( "Hits: " + this.hits ) +
+            formatInfo( "Misses: " + this.misses ) +
+            formatInfo( "Hit rate: " + this.hits / ( this.hits + this.misses ) )
         );
     }
 
@@ -142,28 +145,30 @@ class Cache {
         return [ tag, index, offset ];
     }
 
-    display( displayRow, displayCol ) {
-        entries = displayRow(
-            displayCol( 'set' ) +
-            this.entry.displayNames( displayCol ) 
+    display( formatRow, formatCol ) {
+        var entries = formatRow(
+            formatCol( 'set' ) +
+            this.cacheEntry.displayLabels( formatCol ) 
         );
         for ( var set = 0; set < this.sets; set++ ) {
             for ( var id = 0; id < this.setSize; id++ ) {
-                entries += displayRow(
-                    displayCol( toHex( set ) ) +
-                    this.entry.displayNames( displayCol )
+                entries += formatRow(
+                    formatCol( toHex( set ) ) +
+                    this.cache[set][id].display( formatCol )
                 );
             }
         }
+        return entries;
     }
 
     readHit( set, tag, id ) { }
     readMiss( set, tag, id ) { }
     writeHit( set, tag, id ) { }
     writeMiss( set, tag, id ) { }
+    getReplacementId( set, tag ) { }
 
     locate( set, tag ) {
-        for ( var id = 0; id < this.assoc; id++ ) {
+        for ( var id = 0; id < this.setSize; id++ ) {
             if ( this.cache[set][id].valid == 1 && this.cache[set][id].tag == tag ) {
                 return id;
             }
@@ -179,7 +184,7 @@ class Cache {
         }
         else { 
             this.cache.misses++;
-            writeMiss( set, tag, id );
+            writeMiss( set, tag );
         }
     }
     
@@ -198,7 +203,7 @@ class Cache {
         }
         else { 
             this.cache.misses++;
-            readMiss( set, tag, id );
+            readMiss( set, tag );
         }
     }
     
@@ -211,8 +216,12 @@ class Cache {
 }
 
 class LRUCache extends Cache {
+    constructor( cacheSize, blockSize, setSize, next=null ) {
+        super( cacheSize, blockSize, setSize, LRUCacheEntry, next=null );
+    }
+
     getLRUId( set ) {
-        var lruId = 0;
+        var replaceId = 0;
         for ( var entryId = 0; entryId < setSize; entryId++ ) {
             if ( this.cache[set][replaceId].lru < this.cache[set][replaceId].lru ) {
                 replaceId = id;
@@ -224,8 +233,7 @@ class LRUCache extends Cache {
     replaceLRU( set, tag ) {
         var id = getLRUid( set );
         var replaced = this.cache[set][id];
-        this.cache[set][id] = new LRUCacheEntry( 1, tag, 0 );
-        return replaced;
+        this.cache[set][id] = new cacheEntry( 1, tag, 0 );
     }
 
     use( set, tag, id ) {
@@ -241,24 +249,24 @@ class LRUCache extends Cache {
 
 // Note: no-write-allocate
 class WriteThroughLRU extends LRUCache {
-    constructor( cacheSize, blockSize, setSize, next=null ) {
-        super( cacheSize, blockSize, setSize, LRUCacheEntry, next=null );
-    }
-
     writeHit( set, tag, id ) {
         use( set, tag, id );
-        if ( this.next ) { this.next.write( set, tag ); }
+        if ( this.next ) { 
+            this.next.write( set, tag ); 
+        }
     }
 
-    writeMiss( set, tag, id ) {
-        if ( this.next ) { this.next.write( set, tag );
+    writeMiss( set, tag ) {
+        if ( this.next ) { 
+            this.next.write( set, tag ); 
+        }
     }
     
     readHit( set, tag, id ) {
         use( set, tag, id );
     }
 
-    readMiss( set, tag, id ) {
+    readMiss( set, tag ) {
         replaceLRU( set, tag );
         if ( this.next ) { 
             this.next.read( set, tag ); 
@@ -271,22 +279,24 @@ class WriteBackLRU extends LRUCache {
     constructor( cacheSize, blockSize, setSize, next=null ) {
         super( cacheSize, blockSize, setSize, dirtyBitLRUCacheEntry, next=null );
     }   
-
-    replaceLRU( set, tag ) { 
-        replaced = super.replaceLRU( set, tag );
-        if ( replaced.dirty = 1 ) {
-            next.write( set, tag )
+    replaceLRU( set, tag, dirty=0 ) {
+        var id = getLRUid( set );
+        var replaced = this.cache[set][id];
+        this.cache[set][id] = new cacheEntry( 1, tag, 0, dirty );
+        if ( replaced.dirty == 1 ) {
+            next.write( replaced.set, replaced.tag );
+        }
+    }
 
     writeHit( set, tag, id ) {
         use( set, tag, id );
         this.cache[set][id].dirty = 1;
     }
 
-    writeMiss( set, tag, id ) {
+    writeMiss( set, tag ) {
+        id = getLRUId( set, tag );
         replaced = replaceLRU( set, tag );
-        if ( this.next ) { 
-            this.next.write( set, tag ); 
-        }
+        this.cache[set][id].dirty = 1;
     }
     
     readHit( set, tag, id ) {
@@ -302,7 +312,7 @@ class WriteBackLRU extends LRUCache {
 }
 
 
-
+/*
         ( var id = 0; entry < this.assoc; entry++ ) {
             if ( this.cache[index][entry][0] ) {
                 this.cache[index][entry][3]++;
@@ -480,7 +490,7 @@ class WriteBackL1 extends Cache {
         result( this, entry, this.L2 );
     }
 }
-
+*/
                         
 function isPower2( value ) {
     return value && !( value & ( value - 1 ) );
