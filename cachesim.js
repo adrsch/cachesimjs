@@ -139,9 +139,10 @@ class Cache {
     }
 
     split( address ) {
-        var tag = this.getTag( address );
-        var index = this.getIndex( address );
-        var offset = this.getOffset( address );
+        var unsignedAddress = toUnsigned( address );
+        var tag = this.getTag( unsignedAddress );
+        var index = this.getIndex( unsignedAddress );
+        var offset = this.getOffset( unsignedAddress );
         return [ tag, index, offset ];
     }
 
@@ -177,14 +178,14 @@ class Cache {
     }
 
     write( set, tag ) {
-        var id = locate( set, tag );
+        var id = this.locate( set, tag );
         if ( id !== null ) {
             this.cache.hits++;
-            writeHit( set, tag, id );
+            this.writeHit( set, tag, id );
         }
         else { 
             this.cache.misses++;
-            writeMiss( set, tag );
+            this.writeMiss( set, tag );
         }
     }
     
@@ -192,18 +193,18 @@ class Cache {
         var attr = this.split( address );
         var tag = attr[0];
         var set = attr[1];
-        write( set, tag );
+        this.write( set, tag );
     }
 
     read( set, tag ) {
-        var id = locate( set, tag );
+        var id = this.locate( set, tag );
         if ( id !== null ) {
             this.cache.hits++;
-            readHit( set, tag, id );
+            this.readHit( set, tag, id );
         }
         else { 
             this.cache.misses++;
-            readMiss( set, tag );
+            this.readMiss( set, tag );
         }
     }
     
@@ -211,29 +212,25 @@ class Cache {
         var attr = this.split( address );
         var tag = attr[0];
         var set = attr[1];
-        read( set, tag );
+        this.read( set, tag );
     }
 }
 
 class LRUCache extends Cache {
-    constructor( cacheSize, blockSize, setSize, next=null ) {
-        super( cacheSize, blockSize, setSize, LRUCacheEntry, next=null );
-    }
-
     getLRUId( set ) {
         var replaceId = 0;
-        for ( var entryId = 0; entryId < setSize; entryId++ ) {
+        for ( var entryId = 0; entryId < this.setSize; entryId++ ) {
             if ( this.cache[set][replaceId].lru < this.cache[set][replaceId].lru ) {
-                replaceId = id;
+                replaceId = entryId;
             }
         }
         return replaceId;
     }
 
     replaceLRU( set, tag ) {
-        var id = getLRUid( set );
+        var id = this.getLRUId( set );
         var replaced = this.cache[set][id];
-        this.cache[set][id] = new cacheEntry( 1, tag, 0 );
+        this.cache[set][id] = new this.cacheEntry( 1, tag, 0 );
     }
 
     use( set, tag, id ) {
@@ -249,8 +246,12 @@ class LRUCache extends Cache {
 
 // Note: no-write-allocate
 class WriteThroughLRU extends LRUCache {
+    constructor( cacheSize, blockSize, setSize, next=null ) {
+        super( cacheSize, blockSize, setSize, LRUCacheEntry, next=null );
+    }
+
     writeHit( set, tag, id ) {
-        use( set, tag, id );
+        this.use( set, tag, id );
         if ( this.next ) { 
             this.next.write( set, tag ); 
         }
@@ -263,11 +264,11 @@ class WriteThroughLRU extends LRUCache {
     }
     
     readHit( set, tag, id ) {
-        use( set, tag, id );
+        this.use( set, tag, id );
     }
 
     readMiss( set, tag ) {
-        replaceLRU( set, tag );
+        this.replaceLRU( set, tag );
         if ( this.next ) { 
             this.next.read( set, tag ); 
         }
@@ -280,232 +281,51 @@ class WriteBackLRU extends LRUCache {
         super( cacheSize, blockSize, setSize, dirtyBitLRUCacheEntry, next=null );
     }   
     replaceLRU( set, tag, dirty=0 ) {
-        var id = getLRUid( set );
+        var id = this.getLRUId( set );
         var replaced = this.cache[set][id];
-        this.cache[set][id] = new cacheEntry( 1, tag, 0, dirty );
+        this.cache[set][id] = new this.cacheEntry( 1, tag, 0, dirty );
         if ( replaced.dirty == 1 ) {
             next.write( replaced.set, replaced.tag );
         }
     }
 
     writeHit( set, tag, id ) {
-        use( set, tag, id );
+        this.use( set, tag, id );
         this.cache[set][id].dirty = 1;
     }
 
     writeMiss( set, tag ) {
-        id = getLRUId( set, tag );
-        replaced = replaceLRU( set, tag );
+        var id = this.getLRUId( set, tag );
+        var replaced = this.replaceLRU( set, tag );
         this.cache[set][id].dirty = 1;
     }
     
     readHit( set, tag, id ) {
-        use( set, tag, id );
+        this.use( set, tag, id );
     }
 
     readMiss( set, tag, id ) {
-        replaceLRU( set, tag );
+        this.replaceLRU( set, tag );
         if ( this.next ) { 
             this.next.read( set, tag ); 
         }
     }
 }
 
-
-/*
-        ( var id = 0; entry < this.assoc; entry++ ) {
-            if ( this.cache[index][entry][0] ) {
-                this.cache[index][entry][3]++;
-            }
-        }
-
-        this.cache[index][id][0] = 1
-        this.cache[index][id][1] = tag
-        this.cache[index
-
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], data[0][2] ] );
-            cache.misses++;
-        }
-        var miss = function( cache, entry ) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 0 ] );
-            cache.cache[attr[1]].pop();
-            cache.misses++;
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry );
-    }
-
-    read( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], data[0][2] ] );
-            cache.hits++;
-        }
-        var miss = function( cache, entry ) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 0 ] );
-            cache.cache[attr[1]].pop();
-            cache.misses++;
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry );
-    }
-}
-
-// Basic writeback cache - does not use an L2 cache but can be used as an L2 cache
-class WriteBack extends Cache {
-    write( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], 1 ] );
-            cache.hits++;
-        }
-        var miss = function( cache, entry ) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 1 ] );
-            if ( cache.cache[attr[1]].pop()[2] === 0 ) { //clean
-                cache.hits++;
-            }
-            else { //dirty
-                cache.misses++;
-            }
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry );
-    }
-
-    read( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], data[0][2] ] );
-            cache.hits++;
-        }
-        var miss = function( cache, entry ) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 0 ] );
-            cache.cache[attr[1]].pop();
-            cache.misses++;
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry );
-    }
-}
-
-// Writeback cache that uses an L2 cache.
-class WriteBackL1 extends Cache {
-    constructor( cacheSize, blockSize, assoc, L2 ) {
-        super( cacheSize, blockSize, assoc );
-        this.L2 = L2;
-    }
-
-    write( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], 1 ] );
-            cache.hits++;
-        }
-        var miss = function( cache, entry ) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 1 ] );
-            if ( cache.cache[attr[1]].pop()[2] === 0 ) { //clean
-                cache.hits++;
-            }
-            else { //dirty
-                cache.misses++;
-                cache.L2.write( address );
-            }
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry, this.L2 );
-    }
-
-    read( address ) {
-        var attr = this.split( address );
-        var entry
-        var hit = function( cache, entry ) {
-            var data = cache.cache[attr[1]].splice( entry, 1 );
-            cache.cache[attr[1]].unshift( [ data[0][0], data[0][1], data[0][2] ] );
-            cache.hits++;
-        }
-        var miss = function( cache, entry) {
-            cache.cache[attr[1]].unshift( [ 1, attr[0], 0 ] );
-            cache.cache[attr[1]].pop();
-            cache.misses++;
-            cache.L2.read( address );
-        }
-        var result = miss; //assume miss
-        for ( entry = 0; entry < this.assoc; entry++ ) {
-            var valid = this.cache[attr[1]][entry][0] 
-            var tag = this.cache[attr[1]][entry][1]
-            if ( valid == 1 && tag == attr[0] ) {
-                result = hit;
-                break;
-            }
-        }
-        result( this, entry, this.L2 );
-    }
-}
-*/
-                        
 function isPower2( value ) {
     return value && !( value & ( value - 1 ) );
 }
 
 // Run a single instruction
-function runInstruction( type, addressHex, dataCache, instructionCache ) {
-    if ( type === "0" ) {
-        dataCache.read( address );
+function runInstruction( type, address, dataCache, instructionCache ) {
+    if ( type == 'lw' || type == 0 ) {
+        dataCache.readAddress( address );
     }
-    else if ( type === "1" ) {
-        dataCache.write( address );
+    else if ( type == 'write' || type == 1 ) {
+        dataCache.writeAddress( address );
     }
-    else if ( type === "2" ) {
-        instructionCache.read( address );
+    else if ( type == 'readi' || type == 2 ) {
+        instructionCache.readAddress( address );
     }
 }
 
